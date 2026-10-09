@@ -18,6 +18,7 @@ jobs:
           npm i @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
           echo '{"appId":"com.myrestaurant.pos","appName":"Restaurant POS","webDir":"www"}' > capacitor.config.json
           npx cap add android
+          bash setup.sh
           npx cap sync
           cd android && chmod +x gradlew && ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
