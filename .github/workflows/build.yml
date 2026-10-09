@@ -1,0 +1,26 @@
+name: Build APK
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: |
+          mkdir www && cp index.html www/index.html
+          npm init -y
+          npm i @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          echo '{"appId":"com.myrestaurant.pos","appName":"Restaurant POS","webDir":"www"}' > capacitor.config.json
+          npx cap add android
+          npx cap sync
+          cd android && chmod +x gradlew && ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: restaurant-pos-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
