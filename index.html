@@ -17,11 +17,11 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:"Bricolage Grote
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:3px solid var(--acc);outline-offset:2px}
-header{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 6px;max-width:1000px;margin:0 auto}
+header{flex-wrap:wrap;gap:6px;display:flex;justify-content:space-between;align-items:center;padding:14px 16px 6px;max-width:1000px;margin:0 auto}
 h1{font-size:22px;font-weight:800;margin:0}
 .day{color:var(--mute);font-size:14px}
-nav{display:flex;gap:6px;padding:6px 16px;max-width:1000px;margin:0 auto}
-nav button{flex:1;padding:10px;border:1px solid var(--line);background:var(--card);border-radius:10px;font-weight:600}
+nav{overflow-x:auto;display:flex;gap:6px;padding:6px 16px;max-width:1000px;margin:0 auto}
+nav button{flex:none;white-space:nowrap;padding:10px 14px;border:1px solid var(--line);background:var(--card);border-radius:10px;font-weight:600}
 nav button[aria-selected="true"]{background:var(--acc);color:var(--accink);border-color:var(--acc)}
 main{max-width:1000px;margin:0 auto;padding:8px 16px 96px}
 .cats{display:flex;gap:8px;overflow-x:auto;padding:4px 0 10px}
@@ -58,25 +58,21 @@ select,input{padding:10px;border:1px solid var(--line);border-radius:10px;backgr
 </style>
 </head>
 <body>
-<header><h1>Table Service</h1><div><span class="day" id="day"></span> <button class="sec" id="cur" aria-label="Switch currency"></button></div></header>
-<nav role="tablist">
-  <button role="tab" data-v="order" aria-selected="true">Take order</button>
-  <button role="tab" data-v="open" aria-selected="false">Open orders</button>
-  <button role="tab" data-v="menu" aria-selected="false">Edit menu</button>
-</nav>
+<header><h1 id="ttl"></h1><div><span class="day" id="day"></span> <button class="sec" id="cur" aria-label="Switch currency"></button> <button class="sec" id="out">Logout</button></div></header>
+<nav role="tablist" id="nav"></nav>
 <main id="app"></main>
 <script>
-var TAX=0.08, KEY="pos-v2", dst={};
+var TAX=0.08, KEY="pos-v2", dst={}, me=null, br="", disc={t:"%",v:0}, rep="m", btl=[];
 var def={menu:[
 {id:1,n:"Bruschetta",p:8,c:"Starters"},{id:2,n:"Soup of the day",p:7,c:"Starters"},{id:3,n:"Caesar salad",p:10,c:"Starters"},
 {id:4,n:"Margherita pizza",p:14,c:"Mains"},{id:5,n:"Grilled salmon",p:22,c:"Mains"},{id:6,n:"Beef burger",p:16,c:"Mains"},{id:7,n:"Mushroom pasta",p:15,c:"Mains"},
 {id:8,n:"Tiramisu",p:8,c:"Desserts"},{id:9,n:"Cheesecake",p:8,c:"Desserts"},
 {id:10,n:"Lemonade",p:4,c:"Drinks"},{id:11,n:"Espresso",p:3,c:"Drinks"},{id:12,n:"House red",p:9,c:"Drinks"}],
-orders:[],nextId:13,nextOrder:1,cur:"PKR",rate:280,tax:8};
+orders:[],nextId:13,nextOrder:1,cur:"PKR",rate:280,tax:8,name:"My Restaurant",users:[{id:1,name:"Admin",pin:"1234",role:"admin"},{id:2,name:"Waiter 1",pin:"0000",role:"waiter"}],branches:[{id:3,name:"Main Branch",addr:""}],bk:[],uid:10};
 def.menu.forEach(function(m){m.p*=40});
 var S;
 try{S=JSON.parse(localStorage.getItem(KEY))||def}catch(e){S=def}
-TAX=S.tax/100;
+TAX=S.tax/100;S.users=S.users||def.users;S.branches=S.branches||def.branches;S.bk=S.bk||[];S.uid=S.uid||10;
 var cart={},table="1",cat="All",view="order";
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 function $(s){return document.querySelector(s)}
@@ -86,27 +82,28 @@ function cats(){var a=["All"];S.menu.forEach(function(m){if(a.indexOf(m.c)<0)a.p
 function lines(){return Object.keys(cart).map(function(id){var m=S.menu.filter(function(x){return x.id==id})[0];return m?{m:m,q:cart[id]}:null}).filter(Boolean)}
 function sub(){return lines().reduce(function(s,l){return s+l.m.p*l.q},0)}
 function cartHTML(){
-  var L=lines(),s=sub(),t=s*TAX;
+  var L=lines(),s=sub(),c=tot(s);
   var h='<div class="panel"><h2>Current order</h2><label class="day">Table</label><select id="tbl">';
   for(var i=1;i<=20;i++)h+='<option'+(String(i)===table?' selected':'')+'>'+i+'</option>';
   h+='<option'+(table==="Takeaway"?' selected':'')+'>Takeaway</option></select>';
   if(!L.length)h+='<div class="empty">Tap a dish to add it.</div>';
   L.forEach(function(l){h+='<div class="row"><span>'+esc(l.m.n)+'<br><span class="day">'+money(l.m.p)+'</span> <button class="sec" data-dst="'+l.m.id+'" style="padding:2px 8px;font-size:13px">'+(dst[l.m.id]==="C"?"Counter":"Kitchen")+'</button></span><span class="qty"><button data-d="-1" data-id="'+l.m.id+'" aria-label="Remove one">−</button><b>'+l.q+'</b><button data-d="1" data-id="'+l.m.id+'" aria-label="Add one">+</button></span></div>'});
-  h+='<div class="tot"><span>Subtotal</span><span>'+money(s)+'</span></div><div class="tot"><span>Tax '+S.tax+'%</span><span>'+money(t)+'</span></div><div class="tot big"><span>Total</span><span>'+money(s+t)+'</span></div>';
+  h+='<div class="tot"><span>Subtotal</span><span>'+money(s)+'</span></div>'+(c.d?'<div class="tot"><span>Discount</span><span>-'+money(c.d)+'</span></div>':'')+'<div class="tot"><span>Tax '+S.tax+'%</span><span>'+money(c.t)+'</span></div><div class="tot big"><span>Total</span><span>'+money(c.T)+'</span></div>'+discUI();
   h+='<button class="pri" id="send"'+(L.length?'':' disabled')+'>Place order</button><div style="display:flex;gap:8px;margin-top:8px"><button class="sec" data-all="K" style="flex:1">All to kitchen</button><button class="sec" data-all="C" style="flex:1">All to counter</button></div><div class="day" style="margin-top:6px">Counter items are paid and finalized now. Kitchen items go to the kitchen.</div>';
   if(L.length)h+='<button class="sec" id="clr" style="width:100%;margin-top:8px">Clear order</button>';
   return h+'</div>';
 }
 function render(){
-  var a=$("#app"),h="";$("#cur").textContent="Currency: "+S.cur;
-  document.querySelectorAll("nav button").forEach(function(b){b.setAttribute("aria-selected",b.dataset.v===view)});
+  if(!me){loginView();return}if(me.role!=="admin"&&["stock","rep","menu"].indexOf(view)>-1)view="order";var a=$("#app"),h="";$("#cur").textContent="Currency: "+S.cur;$("#ttl").innerHTML=(S.logo?'<img src="'+S.logo+'" alt="" style="height:30px;vertical-align:middle;border-radius:6px;margin-right:6px">':'')+esc(S.name||"Restaurant")+'<br><span class="day" style="font-weight:400;font-size:13px">'+esc(br)+' · '+esc(me.name)+'</span>';
+  var tabs=[["order","Order"],["open","Open orders"],["book","Bookings"],["stock","Stock"],["rep","Reports"],["menu","Admin"]];
+  $("#nav").innerHTML=tabs.filter(function(x){return me.role==="admin"||["order","open","book"].indexOf(x[0])>-1}).map(function(x){return '<button role="tab" data-v="'+x[0]+'" aria-selected="'+(x[0]===view)+'">'+x[1]+'</button>'}).join("");
   if(view==="order"){
     h+='<div class="cats">'+cats().map(function(c){return '<button data-c="'+esc(c)+'" aria-pressed="'+(c===cat)+'">'+esc(c)+'</button>'}).join("")+'</div>';
     h+='<div class="layout"><div class="grid">';
-    S.menu.filter(function(m){return cat==="All"||m.c===cat}).forEach(function(m){h+='<button class="item" data-add="'+m.id+'"><b>'+esc(m.n)+'</b><span class="price">'+money(m.p)+'</span></button>'});
+    S.menu.filter(function(m){return cat==="All"||m.c===cat}).forEach(function(m){h+='<button class="item" data-add="'+m.id+'"'+(m.st===0?' disabled style="opacity:.4"':'')+'><b>'+esc(m.n)+'</b><span class="price">'+money(m.p)+(m.st!=null&&m.st<=5?' <small>('+m.st+' left)</small>':'')+'</span></button>'});
     h+='</div><div id="cartwrap">'+cartHTML()+'</div></div>';
     var n=lines().reduce(function(s,l){return s+l.q},0);
-    if(n)h+='<div id="bar"><button id="go">View order · '+n+' items · '+money(sub()*(1+TAX))+'</button></div>';
+    if(n)h+='<div id="bar"><button id="go">View order · '+n+' items · '+money(tot(sub()).T)+'</button></div>';
   }else if(view==="open"){
     var open=S.orders.filter(function(o){return !o.done}),done=S.orders.filter(function(o){return o.done});
     var rev=done.reduce(function(s,o){return s+o.total},0);
@@ -116,15 +113,60 @@ function render(){
     h+='</div><div class="panel" style="margin-top:12px"><h2>Paid today: '+money(rev)+' ('+done.length+')</h2>';
     done.slice().reverse().forEach(function(o){h+=ordHTML(o,false)});
     h+='</div>';
-  }else{
+  }else if(view==="book"){h+=bookView()}else if(view==="stock"){h+=stockView()}else if(view==="rep"){h+=repView()}else{
     h+='<div class="panel"><h2>Menu</h2>';
     S.menu.forEach(function(m){h+='<div class="row"><span>'+esc(m.n)+' <span class="tag">'+esc(m.c)+'</span></span><span>'+money(m.p)+' <button class="sec del" data-del="'+m.id+'" aria-label="Delete '+esc(m.n)+'">Delete</button></span></div>'});
-    h+='<div class="form"><input id="nn" placeholder="Dish name"><input id="np" type="number" min="0" step="0.5" placeholder="Price ('+S.cur+')"><input id="nc" list="cl" placeholder="Category (e.g. Mains)"><datalist id="cl">'+cats().slice(1).map(function(c){return '<option value="'+esc(c)+'">'}).join("")+'</datalist><button class="pri" id="add" style="margin:0">Add dish</button></div></div><div class="panel" style="margin-top:12px"><h2>Settings</h2><label class="day">1 USD = PKR</label><input id="rate" type="number" value="'+S.rate+'"><label class="day">Tax %</label><input id="tax" type="number" value="'+S.tax+'"></div>';
+    h+='<div class="form"><input id="nn" placeholder="Dish name"><input id="np" type="number" min="0" step="0.5" placeholder="Price ('+S.cur+')"><input id="nc" list="cl" placeholder="Category (e.g. Mains)"><datalist id="cl">'+cats().slice(1).map(function(c){return '<option value="'+esc(c)+'">'}).join("")+'</datalist><button class="pri" id="add" style="margin:0">Add dish</button></div></div><div class="panel" style="margin-top:12px"><h2>Settings</h2><label class="day">Restaurant name</label><input id="rn" value="'+esc(S.name||"")+'"><label class="day">1 USD = PKR</label><input id="rate" type="number" value="'+S.rate+'"><label class="day">Tax %</label><input id="tax" type="number" value="'+S.tax+'"></div>'+adminExtra();
   }
   a.innerHTML=h;
 }
 function ordHTML(o,open){
-  return '<div class="row" style="align-items:flex-start"><span><b>#'+o.id+' · '+(o.table==="Takeaway"?"Takeaway":"Table "+o.table)+'</b> <span class="tag'+(open?'':' done')+'">'+(open?"In kitchen":(o.kind==="Counter"?"Counter · paid":"Paid"))+'</span><br><span class="day">'+o.items.map(function(i){return i.q+"× "+esc(i.n)}).join(", ")+'</span></span><span style="text-align:right"><b>'+money(o.total)+'</b>'+(open?'<br><button class="sec" data-pay="'+o.id+'" style="margin-top:4px">Mark paid</button>':'')+'</span></div>';
+  return '<div class="row" style="align-items:flex-start"><span><b>#'+o.id+' · '+(o.table==="Takeaway"?"Takeaway":"Table "+o.table)+'</b> <span class="tag'+(open?'':' done')+'">'+(open?"In kitchen":(o.kind==="Counter"?"Counter · paid":"Paid"))+'</span>'+(o.by?' <span class="tag">'+esc(o.by)+'</span>':'')+'<br><span class="day">'+o.items.map(function(i){return i.q+"× "+esc(i.n)}).join(", ")+'</span></span><span style="text-align:right"><b>'+money(o.total)+'</b><br><button class="sec" data-print="'+o.id+'" style="margin-top:4px">Print bill</button>'+(open?' <button class="sec" data-pay="'+o.id+'" style="margin-top:4px">Mark paid</button>':'')+'</span></div>';
+}
+function dsc(g){var T=sub();var d=disc.t==="%"?g*disc.v/100:(S.cur==="USD"?disc.v*S.rate:disc.v)*(T?g/T:0);return Math.min(Math.max(d,0),g)}
+function tot(g){var d=dsc(g);return{d:d,t:(g-d)*TAX,T:(g-d)*(1+TAX)}}
+function discUI(){if(!me||me.role!=="admin"||!lines().length)return"";return '<div style="display:flex;gap:6px;margin-top:8px"><select id="dt" style="width:110px"><option value="%"'+(disc.t==="%"?" selected":"")+'>Discount %</option><option value="amt"'+(disc.t==="amt"?" selected":"")+'>Discount '+S.cur+'</option></select><input id="dv" type="number" min="0" placeholder="0" value="'+(disc.v||"")+'"></div>'}
+function loginView(){$("#ttl").textContent=S.name||"Restaurant";$("#nav").innerHTML="";$("#cur").textContent="Currency: "+S.cur;
+$("#app").innerHTML='<div class="panel" style="max-width:360px;margin:20px auto"><h2>Login</h2><label class="day">User</label><select id="lu">'+S.users.map(function(u){return '<option value="'+u.id+'">'+esc(u.name)+' ('+u.role+')</option>'}).join("")+'</select><label class="day">Branch</label><select id="lb">'+S.branches.map(function(b){return '<option>'+esc(b.name)+'</option>'}).join("")+'</select><label class="day">PIN</label><input id="lp" type="password" inputmode="numeric"><div id="err" style="color:var(--hot);min-height:22px"></div><button class="pri" id="login">Login</button><div class="day" style="margin-top:8px">First time: Admin PIN 1234, Waiter PIN 0000. Change them in Admin.</div></div>'}
+function bookView(){var h='<div class="panel"><h2>Online booking link</h2>'+linkBox()+'</div><div class="panel" style="margin-top:12px"><h2>Table bookings</h2><div class="form"><input id="bn" placeholder="Customer name"><input id="bg" type="number" min="1" placeholder="Guests"><input id="bp" type="tel" placeholder="Phone"><input id="bk" placeholder="Table no."><input id="bd" type="date"><input id="bt" type="time"><button class="pri" id="addbk" style="margin:0">Add booking</button></div></div><div class="panel" style="margin-top:12px"><h2>Upcoming</h2>';
+if(!S.bk.length)h+='<div class="empty">No bookings yet.</div>';
+S.bk.slice().sort(function(a,b){return (a.d+a.t)<(b.d+b.t)?-1:1}).forEach(function(b){h+='<div class="row" style="align-items:flex-start"><span><b>'+esc(b.n)+'</b> <span class="tag">'+b.s+'</span><br><span class="day">'+esc(b.d)+' '+esc(b.t||"")+' · '+esc(b.g||"?")+' guests · Table '+esc(b.tb||"-")+(b.ph?' · '+esc(b.ph):'')+'</span></span><span style="text-align:right"><button class="sec" data-bks="'+b.id+':Confirmed">Confirm</button> <button class="sec" data-bks="'+b.id+':Seated">Seated</button> <button class="sec del" data-bkd="'+b.id+'">Delete</button></span></div>'});
+return h+'</div>'}
+function stockView(){var h='<div class="panel"><h2>Inventory</h2><div class="day">Number likhen to stock track hoga aur har order par kam hoga. Khali chorren to track nahi hoga.</div>';
+S.menu.forEach(function(m){var low=m.st!=null&&m.st<=5;h+='<div class="row"><span>'+esc(m.n)+(low?' <span class="tag" style="color:var(--hot);border-color:var(--hot)">'+(m.st===0?"Out":"Low")+'</span>':'')+'</span><input type="number" min="0" data-stk="'+m.id+'" value="'+(m.st==null?"":m.st)+'" placeholder="-" style="width:90px"></div>'});
+return h+'</div>'}
+function repView(){var g={},ti={};S.orders.forEach(function(o){if(!o.ts||!o.done)return;var d=new Date(o.ts),k=rep==="y"?""+d.getFullYear():d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2);var r=g[k]=g[k]||{n:0,s:0,d:0};r.n++;r.s+=o.total;r.d+=o.disc||0;o.items.forEach(function(i){ti[i.n]=(ti[i.n]||0)+i.q})});
+var h='<div class="cats"><button data-rep="m" aria-pressed="'+(rep==="m")+'">Monthly</button><button data-rep="y" aria-pressed="'+(rep==="y")+'">Yearly</button></div><div class="panel"><h2>Sales summary</h2>';
+var ks=Object.keys(g).sort().reverse();if(!ks.length)h+='<div class="empty">No paid orders yet.</div>';
+ks.forEach(function(k){h+='<div class="row"><span><b>'+k+'</b><br><span class="day">'+g[k].n+' orders · discounts '+money(g[k].d)+'</span></span><b>'+money(g[k].s)+'</b></div>'});
+h+='</div><div class="panel" style="margin-top:12px"><h2>Top items</h2>';
+Object.keys(ti).sort(function(a,b){return ti[b]-ti[a]}).slice(0,5).forEach(function(k){h+='<div class="row"><span>'+esc(k)+'</span><b>'+ti[k]+'</b></div>'});
+return h+'</div>'}
+function adminExtra(){var h='<div class="panel" style="margin-top:12px"><h2>Logo</h2>'+(S.logo?'<img src="'+S.logo+'" alt="" style="height:60px;display:block;margin-bottom:8px"><button class="sec" id="rmlogo" style="margin-bottom:8px">Remove logo</button>':'')+'<input type="file" id="lg" accept="image/*"></div>';
+h+='<div class="panel" style="margin-top:12px"><h2>Branches</h2>'+S.branches.map(function(b){return '<div class="row"><span>'+esc(b.name)+'<br><span class="day">'+esc(b.addr||"")+(b.addr?' · <a href="https://www.google.com/maps/search/?api=1&amp;query='+encodeURIComponent(b.addr)+'" target="_blank" rel="noopener" style="color:var(--acc)">Map</a>':'')+'</span></span>'+(S.branches.length>1?'<button class="sec del" data-delbr="'+b.id+'">Delete</button>':'')+'</div>'}).join("")+'<div class="form"><input id="bnm" placeholder="Branch name"><input id="bad" placeholder="Address"><button class="pri" id="addbr" style="margin:0">Add branch</button></div></div>';
+h+='<div class="panel" style="margin-top:12px"><h2>Users and PINs</h2>'+S.users.map(function(u){return '<div class="row"><span>'+esc(u.name)+' <span class="tag">'+u.role+'</span><br><span class="day">PIN '+esc(u.pin)+'</span></span><span><button class="sec" data-pin="'+u.id+'">Change PIN</button>'+(u.id!==me.id?' <button class="sec del" data-delus="'+u.id+'">Delete</button>':'')+'</span></div>'}).join("")+'<div class="form"><input id="un" placeholder="Name"><input id="up" placeholder="PIN" inputmode="numeric"><select id="ur"><option value="waiter">Waiter</option><option value="admin">Admin</option></select><button class="pri" id="addus" style="margin:0">Add user</button></div></div>';
+h+='<div class="panel" style="margin-top:12px"><h2>Printing and WhatsApp</h2><label class="day">Restaurant WhatsApp (e.g. 923001234567)</label><input id="wa" inputmode="numeric" value="'+esc(S.wa||"")+'"><label class="day">Printer type</label><select id="pm"><option value="sys"'+(S.pm!=="bt"?" selected":"")+'>Normal printer (Android print)</option><option value="bt"'+(S.pm==="bt"?" selected":"")+'>Bluetooth thermal printer</option></select><label class="day">Paper width</label><select id="pw"><option value="32"'+(S.pw!=48?" selected":"")+'>58 mm</option><option value="48"'+(S.pw==48?" selected":"")+'>80 mm</option></select><div class="day" style="margin:8px 0">Selected: '+esc(S.pn||"none")+'</div><button class="sec" id="fp">Find paired printers</button>'+btl.map(function(d){return '<div class="row"><span>'+esc(d.name||d.addr)+'</span><button class="sec" data-bt="'+d.addr+'" data-bn="'+esc(d.name||"")+'">Use</button></div>'}).join("")+' <button class="sec" id="tp">Test print</button></div>';
+return h}
+function logoUp(f){var r=new FileReader();r.onload=function(){var im=new Image();im.onload=function(){var c=document.createElement("canvas"),k=Math.min(1,200/Math.max(im.width,im.height));c.width=im.width*k;c.height=im.height*k;c.getContext("2d").drawImage(im,0,0,c.width,c.height);S.logo=c.toDataURL("image/png");save();render()};im.src=r.result};r.readAsDataURL(f)}
+var BOOKURL="https://claude.ai/artifact/FyvSaFDqQFkf8nCyArrT9j";
+function bookLink(){return BOOKURL+"?wa="+encodeURIComponent((S.wa||"").replace(/\D/g,""))+"&n="+encodeURIComponent(S.name||"")}
+function linkBox(){return S.wa?'<div class="day" style="margin-bottom:6px">Customers ko yeh link bhejen. Request aap ko WhatsApp par aayegi, phir neeche booking add karen.</div><input readonly onclick="this.select()" value="'+esc(bookLink())+'">':'<div class="day">Admin tab ke Printing and WhatsApp mein restaurant ka WhatsApp number likhen.</div>'}
+function btSend(text){if(!window.BtPrint){alert("Bluetooth printing works only in the Android app.");return}if(!S.pa){alert("Admin tab mein printer chunen.");return}BtPrint.print(S.pa,text)}
+window.btDone=function(m){alert(m==="OK"?"Printed":"Printer error: "+m)};
+function rcpt(o){var W=S.pw||32,L=[],ctr=function(x){return " ".repeat(Math.max(0,Math.floor((W-x.length)/2)))+x},two=function(a,b){return a.slice(0,Math.max(0,W-b.length-1)).padEnd(W-b.length)+b},sub=0,hasP=true,ln="-".repeat(W);
+L.push(ctr(S.name||"Restaurant"));if(o.br)L.push(ctr(o.br));L.push(ctr(new Date().toLocaleString()));L.push("Bill #"+o.id+" "+(o.table==="Takeaway"?"Takeaway":"Table "+o.table)+(o.by?" "+o.by:""));L.push(ln);
+o.items.forEach(function(i){if(i.p==null)hasP=false;var a=(i.p||0)*i.q;sub+=a;L.push(two(i.q+" x "+i.n,i.p==null?"":money(a)))});
+L.push(ln);if(hasP){L.push(two("Subtotal",money(sub)));if(o.disc)L.push(two("Discount","-"+money(o.disc)));L.push(two("Tax",money(o.total-sub+(o.disc||0))))}
+L.push(two("TOTAL",money(o.total)));L.push(ln);L.push(ctr("Thank you!"));return L.join("\n")+"\n"}
+function printBill(id){
+  var o=S.orders.filter(function(x){return x.id==id})[0];if(!o)return;if(S.pm==="bt"){btSend(rcpt(o));return}
+  var sub=0,hasP=true,B=S.branches.filter(function(b){return b.name===o.br})[0];
+  var rows=o.items.map(function(i){if(i.p==null)hasP=false;var a=(i.p||0)*i.q;sub+=a;return '<tr><td>'+i.q+' x '+esc(i.n)+'</td><td align="right">'+(i.p==null?"":money(a))+'</td></tr>'}).join("");
+  var t=function(a,b,bold){return '<tr><td>'+(bold?"<b>"+a+"</b>":a)+'</td><td align="right">'+(bold?"<b>"+b+"</b>":b)+'</td></tr>'};
+  var sum=(hasP?t("Subtotal",money(sub))+(o.disc?t("Discount","-"+money(o.disc)):"")+t("Tax",money(o.total-sub+(o.disc||0))):"")+t("Total",money(o.total),true);
+  var html='<html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;max-width:320px;margin:0 auto;font-size:14px">'+(S.logo?'<div style="text-align:center"><img src="'+S.logo+'" style="height:50px"></div>':'')+'<h2 style="text-align:center;margin:0">'+esc(S.name||"Restaurant")+'</h2>'+(B?'<div style="text-align:center;font-size:12px">'+esc(B.name)+(B.addr?", "+esc(B.addr):"")+'</div>':'')+'<p style="text-align:center;margin:4px 0">'+new Date().toLocaleString()+'</p><p>Bill #'+o.id+' - '+(o.table==="Takeaway"?"Takeaway":"Table "+o.table)+(o.by?" - "+esc(o.by):"")+'</p><hr><table style="width:100%">'+rows+'</table><hr><table style="width:100%">'+sum+'</table><hr><p style="text-align:center">Thank you!</p></body></html>';
+  if(window.AndroidPrint){AndroidPrint.print(html);return}
+  var f=document.createElement("iframe");f.style.cssText="position:fixed;width:0;height:0;border:0";document.body.appendChild(f);f.contentDocument.write(html);f.contentDocument.close();setTimeout(function(){f.contentWindow.focus();f.contentWindow.print()},300);
 }
 document.addEventListener("click",function(e){
   var t=e.target.closest("button");if(!t)return;
@@ -140,9 +182,25 @@ document.addEventListener("click",function(e){
   if(t.id==="send"){
     var L=lines();if(!L.length)return;
     var s=sub();
-    [["K",false],["C",true]].forEach(function(g){var G=L.filter(function(l){return (dst[l.m.id]==="C"?"C":"K")===g[0]});if(!G.length)return;var gs=G.reduce(function(a,l){return a+l.m.p*l.q},0);S.orders.push({id:S.nextOrder++,table:table,kind:g[0]==="C"?"Counter":"Kitchen",items:G.map(function(l){return{n:l.m.n,q:l.q}}),total:gs*(1+TAX),done:g[1]})});
-    dst={};
+    [["K",false],["C",true]].forEach(function(g){var G=L.filter(function(l){return (dst[l.m.id]==="C"?"C":"K")===g[0]});if(!G.length)return;var gs=G.reduce(function(a,l){return a+l.m.p*l.q},0);S.orders.push({id:S.nextOrder++,table:table,kind:g[0]==="C"?"Counter":"Kitchen",items:G.map(function(l){return{n:l.m.n,q:l.q,p:l.m.p}}),total:tot(gs).T,disc:tot(gs).d,ts:Date.now(),by:me.name,br:br,done:g[1]})});
+    L.forEach(function(l){if(l.m.st!=null)l.m.st=Math.max(0,l.m.st-l.q)});disc={t:"%",v:0};dst={};
     cart={};save();view="open";render();return}
+  if(t.id==="login"){var u=S.users.filter(function(x){return x.id==$("#lu").value})[0];if(u&&u.pin===$("#lp").value){me=u;br=$("#lb").value;view="order";render()}else $("#err").textContent="Wrong PIN";return}
+  if(t.id==="out"){me=null;cart={};render();return}
+  if(t.dataset.rep){rep=t.dataset.rep;render();return}
+  if(t.id==="addbk"){var bn=$("#bn").value.trim(),bd=$("#bd").value;if(!bn||!bd){$("#bn").focus();return}S.bk.push({id:S.uid++,n:bn,ph:$("#bp").value,d:bd,t:$("#bt").value,g:$("#bg").value,tb:$("#bk").value,s:"Pending"});save();render();return}
+  if(t.dataset.bks){var q=t.dataset.bks.split(":");S.bk.forEach(function(b){if(b.id==q[0])b.s=q[1]});save();render();return}
+  if(t.dataset.bkd){S.bk=S.bk.filter(function(b){return b.id!=t.dataset.bkd});save();render();return}
+  if(t.id==="addbr"){var bm=$("#bnm").value.trim();if(!bm)return;S.branches.push({id:S.uid++,name:bm,addr:$("#bad").value.trim()});save();render();return}
+  if(t.dataset.delbr){S.branches=S.branches.filter(function(b){return b.id!=t.dataset.delbr});save();render();return}
+  if(t.id==="addus"){var un=$("#un").value.trim(),up=$("#up").value.trim();if(!un||!up)return;S.users.push({id:S.uid++,name:un,pin:up,role:$("#ur").value});save();render();return}
+  if(t.dataset.delus){S.users=S.users.filter(function(x){return x.id!=t.dataset.delus});save();render();return}
+  if(t.dataset.pin){var np=prompt("New PIN");if(np){S.users.forEach(function(x){if(x.id==t.dataset.pin)x.pin=np});save();render()}return}
+  if(t.id==="fp"){if(!window.BtPrint){alert("Bluetooth printing works only in the Android app.");return}var rl=BtPrint.list();try{btl=JSON.parse(rl)}catch(x){alert(String(rl));btl=[]}render();return}
+  if(t.dataset.bt){S.pa=t.dataset.bt;S.pn=t.dataset.bn||t.dataset.bt;S.pm="bt";save();render();return}
+  if(t.id==="tp"){btSend("TEST PRINT\n"+(S.name||"")+"\nPrinter OK\n");return}
+  if(t.id==="rmlogo"){S.logo="";save();render();return}
+  if(t.dataset.print){printBill(t.dataset.print);return}
   if(t.dataset.pay){S.orders.forEach(function(o){if(o.id==t.dataset.pay)o.done=true});save();render();return}
   if(t.dataset.del){S.menu=S.menu.filter(function(m){return m.id!=t.dataset.del});delete cart[t.dataset.del];save();render();return}
   if(t.id==="add"){
@@ -150,7 +208,7 @@ document.addEventListener("click",function(e){
     if(!n||isNaN(p)){$("#nn").focus();return}
     S.menu.push({id:S.nextId++,n:n,p:(S.cur==="USD"?p*S.rate:p),c:c});save();render()}
 });
-document.addEventListener("change",function(e){if(e.target.id==="tbl")table=e.target.value;var v=parseFloat(e.target.value);if(e.target.id==="rate"&&v>0){S.rate=v;save()}if(e.target.id==="tax"&&v>=0){S.tax=v;TAX=v/100;save()}});
+document.addEventListener("change",function(e){if(e.target.id==="tbl")table=e.target.value;var v=parseFloat(e.target.value);if(e.target.id==="dt"){disc.t=e.target.value;render()}if(e.target.id==="dv"){disc.v=parseFloat(e.target.value)||0;render()}if(e.target.dataset.stk){var sm=S.menu.filter(function(x){return x.id==e.target.dataset.stk})[0];if(sm){sm.st=e.target.value===""?null:Math.max(0,parseInt(e.target.value)||0);save();render()}}if(e.target.id==="lg"&&e.target.files[0])logoUp(e.target.files[0]);if(e.target.id==="wa"){S.wa=e.target.value;save()}if(e.target.id==="pm"){S.pm=e.target.value;save()}if(e.target.id==="pw"){S.pw=parseInt(e.target.value);save()}if(e.target.id==="rn"){S.name=e.target.value;save()}if(e.target.id==="rate"&&v>0){S.rate=v;save()}if(e.target.id==="tax"&&v>=0){S.tax=v;TAX=v/100;save()}});
 $("#day").textContent=new Date().toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"});
 render();
 </script>
